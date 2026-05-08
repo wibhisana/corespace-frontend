@@ -19,7 +19,8 @@ const routes = [
     meta: {
       title: 'Dashboard',
       icon: 'home',
-      roles: ['super_admin', 'hr_manager', 'employee'],
+      // 'staff' ditambahkan ke sini!
+      roles: ['super_admin', 'hr_manager', 'manager', 'employee', 'staff'],
       showInSidebar: true,
     },
   },
@@ -30,7 +31,8 @@ const routes = [
     meta: {
       title: 'AI Assistant',
       icon: 'sparkles',
-      roles: ['super_admin', 'hr_manager', 'employee'],
+      // 'staff' ditambahkan ke sini!
+      roles: ['super_admin', 'hr_manager', 'manager', 'employee', 'staff'],
       showInSidebar: true,
     },
   },
@@ -41,7 +43,8 @@ const routes = [
     meta: {
       title: 'Leave Request',
       icon: 'calendar',
-      roles: ['super_admin', 'hr_manager', 'employee'],
+      // 'staff' ditambahkan ke sini!
+      roles: ['super_admin', 'hr_manager', 'manager', 'employee', 'staff'],
       showInSidebar: true,
     },
   },
@@ -52,7 +55,8 @@ const routes = [
     meta: {
       title: 'Leave Approval',
       icon: 'check-circle',
-      roles: ['super_admin', 'hr_manager'],
+      // Staff tidak boleh mengakses halaman persetujuan (approval)
+      roles: ['super_admin', 'hr_manager', 'manager'],
       showInSidebar: true,
     },
   },
@@ -63,32 +67,44 @@ const router = createRouter({
   routes,
 })
 
+// === GLOBAL NAVIGATION GUARD ===
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
 
+  // 1. Pengecekan Halaman Publik (seperti Login)
   if (to.meta.public) {
     if (to.name === 'login' && auth.isAuthenticated) {
-      return { name: 'dashboard' }
+      // Jika sudah login tapi iseng buka /login, kembalikan ke dashboard
+      return { name: 'dashboard' } 
     }
     return true
   }
 
+  // 2. Pengecekan Sesi Terotentikasi
   if (!auth.isAuthenticated) {
+    // Belum login? Lempar ke halaman login dan catat tujuan awalnya (redirect)
     return { name: 'login', query: { redirect: to.fullPath } }
   }
 
+  // 3. Hydration Sesi (Efek Refresh Page/F5)
+  // Token ada, tapi data user di RAM kosong. Kita harus fetch dari backend (/me).
   if (!auth.user) {
     try {
       await auth.fetchUser()
-    } catch {
+    } catch (error) {
+      // Jika /me gagal (token expired/invalid), bersihkan sisa token agar tidak terjadi infinite loop
+      await auth.logout()
       return { name: 'login', query: { redirect: to.fullPath } }
     }
   }
 
+  // 4. RBAC (Role-Based Access Control)
+  // Mencegah karyawan biasa masuk ke halaman HR Manager
   if (to.meta.roles && !to.meta.roles.some((r) => auth.can(r))) {
     return { name: 'dashboard' }
   }
 
+  // Lolos semua hadangan, silakan lewat!
   return true
 })
 

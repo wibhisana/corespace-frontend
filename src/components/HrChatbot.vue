@@ -1,12 +1,18 @@
 <script setup>
-import { ref, nextTick, useTemplateRef } from 'vue'
-import { aiApi } from '@/utils/api'
+import { ref, nextTick, useTemplateRef, watch } from 'vue'
+import {
+  UserCircleIcon,
+  SparklesIcon,
+  PaperAirplaneIcon,
+} from '@heroicons/vue/24/outline'
+import { aiApi } from '@/utils/aiApi'
 
 const messages = ref([])
 const input = ref('')
 const loading = ref(false)
 const errorMessage = ref('')
 const scrollerRef = useTemplateRef('scroller')
+const textareaRef = useTemplateRef('textarea')
 
 async function scrollToBottom() {
   await nextTick()
@@ -14,10 +20,12 @@ async function scrollToBottom() {
   if (el) el.scrollTop = el.scrollHeight
 }
 
-function refLabel(ref, idx) {
-  if (typeof ref === 'string') return ref
-  return ref?.title || ref?.source || ref?.name || `ref ${idx + 1}`
-}
+watch(input, () => {
+  const el = textareaRef.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+})
 
 async function send() {
   const text = input.value.trim()
@@ -30,12 +38,10 @@ async function send() {
   await scrollToBottom()
 
   try {
-    const { data } = await aiApi.post('/hr-chat', { question: text })
+    const { data } = await aiApi.post('/chat', { message: text })
     messages.value.push({
       role: 'assistant',
-      content: data.answer ?? '(no answer returned)',
-      references: Array.isArray(data.references) ? data.references : [],
-      status: data.status,
+      content: data.answer ?? data.message ?? '(no answer returned)',
     })
   } catch (err) {
     const message = err?.userMessage || 'Failed to reach the AI assistant.'
@@ -60,82 +66,31 @@ function handleKeydown(e) {
 </script>
 
 <template>
-  <div class="flex h-full flex-col bg-gray-50">
-    <!-- Messages -->
-    <div ref="scroller" class="flex-1 overflow-y-auto px-4 py-6">
-      <div class="mx-auto max-w-3xl space-y-4">
-        <div
-          v-if="messages.length === 0"
-          class="text-center text-sm text-gray-400 py-12"
-        >
-          Ask anything about HR policies, leave balances, or company info.
-        </div>
-
-        <div
-          v-for="(msg, i) in messages"
-          :key="i"
-          class="flex"
-          :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
-        >
-          <div
-            class="rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap max-w-[80%]"
-            :class="[
-              msg.role === 'user'
-                ? 'bg-indigo-600 text-white'
-                : msg.isError
-                  ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                  : 'bg-white text-gray-900 border border-gray-200',
-            ]"
-          >
-            <p>{{ msg.content }}</p>
-            <div
-              v-if="msg.references?.length"
-              class="mt-2 pt-2 border-t border-gray-100 flex flex-wrap gap-1.5"
-            >
-              <span
-                v-for="(r, j) in msg.references"
-                :key="j"
-                class="inline-flex items-center rounded-full border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700"
-              >
-                {{ refLabel(r, j) }}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="loading" class="flex justify-start">
-          <div class="rounded-2xl bg-white border border-gray-200 px-4 py-2.5 text-sm text-gray-500">
-            <span class="inline-flex gap-1">
-              <span class="h-2 w-2 rounded-full bg-gray-400 animate-bounce [animation-delay:-0.3s]" />
-              <span class="h-2 w-2 rounded-full bg-gray-400 animate-bounce [animation-delay:-0.15s]" />
-              <span class="h-2 w-2 rounded-full bg-gray-400 animate-bounce" />
-            </span>
-          </div>
-        </div>
+  <div class="flex flex-col h-full bg-white">
+    <div class="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
+      <div class="h-10 w-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white">
+        <SparklesIcon class="h-6 w-6" />
+      </div>
+      <div>
+        <h4 class="font-bold text-slate-900">CoreSpace AI</h4>
+        <p class="text-[10px] text-emerald-500 font-bold uppercase tracking-widest">Online</p>
       </div>
     </div>
 
-    <!-- Composer -->
-    <div class="border-t border-gray-200 bg-white px-4 py-3">
-      <div class="mx-auto max-w-3xl">
-        <p v-if="errorMessage" class="mb-2 text-xs text-rose-600">{{ errorMessage }}</p>
-        <div class="flex items-end gap-2 rounded-xl border border-gray-300 bg-white px-3 py-2 focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-500">
-          <textarea
-            v-model="input"
-            @keydown="handleKeydown"
-            rows="1"
-            placeholder="Type your question…"
-            class="flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-gray-400 max-h-40"
-          />
-          <button
-            @click="send"
-            :disabled="loading || !input.trim()"
-            class="rounded-md bg-indigo-600 text-white text-sm px-3 py-1.5 hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Send
-          </button>
-        </div>
-        <p class="mt-1.5 text-[11px] text-gray-400">Press Enter to send, Shift+Enter for new line.</p>
+    <div ref="chatContainer" class="flex-1 overflow-y-auto p-6 space-y-6">
+       </div>
+
+    <div class="p-6 bg-white border-t border-slate-100">
+      <div class="max-w-4xl mx-auto flex items-end gap-3">
+        <textarea
+          v-model="inputQuery"
+          rows="1"
+          placeholder="Type your message..."
+          class="flex-1 py-4 px-6 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-600 focus:outline-none resize-none"
+        ></textarea>
+        <button class="h-14 w-14 bg-indigo-600 text-white rounded-2xl flex items-center justify-center hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100">
+          <PaperAirplaneIcon class="h-6 w-6" />
+        </button>
       </div>
     </div>
   </div>
